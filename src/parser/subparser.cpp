@@ -3197,24 +3197,32 @@ void explodeSub(std::string sub, std::vector<Proxy> &nodes)
     }
 
     //try to parse as clash configuration
-    try
+    if(!processed && regFind(sub, "\"?(Proxy|proxies)\"?:"))
     {
-        if(!processed && regFind(sub, "\"?(Proxy|proxies)\"?:"))
+        std::string proxies_section;
+        regGetMatch(sub, R"(^(?:Proxy|proxies):$\s(?:(?:^ +?.*$| *?-.*$|)\s?)+)", 1, &proxies_section);
+        //the extraction above drops wrapped lines that are not indented, so prefer the whole document
+        const std::string *candidates[] = {&sub, &proxies_section};
+        for(const std::string *candidate : candidates)
         {
-            regGetMatch(sub, R"(^(?:Proxy|proxies):$\s(?:(?:^ +?.*$| *?-.*$|)\s?)+)", 1, &sub);
-            Node yamlnode = Load(sub);
-            if(yamlnode.size() && (yamlnode["Proxy"].IsDefined() || yamlnode["proxies"].IsDefined()))
+            if(candidate->empty())
+                continue;
+            try
             {
-                explodeClash(yamlnode, nodes);
-                processed = true;
+                Node yamlnode = Load(*candidate);
+                if(yamlnode.size() && (yamlnode["Proxy"].IsDefined() || yamlnode["proxies"].IsDefined()))
+                {
+                    explodeClash(yamlnode, nodes);
+                    processed = true;
+                    break;
+                }
+            }
+            catch (std::exception &e)
+            {
+                //writeLog(0, e.what(), LOG_LEVEL_DEBUG);
+                //ignore and fall back to the next candidate
             }
         }
-    }
-    catch (std::exception &e)
-    {
-        //writeLog(0, e.what(), LOG_LEVEL_DEBUG);
-        //ignore
-        throw;
     }
 
     //try to parse as surge configuration
